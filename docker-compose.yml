@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agriangola-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agriangola
+      POSTGRES_PASSWORD: agriangola
+      POSTGRES_DB: agriangola
+    ports:
+      - "5432:5432"
+    volumes:
+      - agri_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agriangola"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: agriangola-redis
+    restart: unless-stopped
+    ports:
+      - "6389:6379"
+    volumes:
+      - agri_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: agriangola-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      WEB_ORIGIN: http://localhost:8080
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-a-long-random-secret}
+      DATABASE_URL: postgresql://agriangola:agriangola@postgres:5432/agriangola?schema=public
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: agriangola-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  agri_pg:
+  agri_redis:

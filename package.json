@@ -1,0 +1,25 @@
+{
+  "name": "agriangola-os",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AgriAngola OS — A infraestrutura digital do agronegócio angolano",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run start:dev -w @agriangola/api",
+    "dev:web": "npm run dev -w @agriangola/web",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run prisma:generate -w @agriangola/api",
+    "db:migrate": "npm run prisma:migrate -w @agriangola/api",
+    "db:seed": "npm run prisma:seed -w @agriangola/api",
+    "db:reset": "npm run prisma:reset -w @agriangola/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

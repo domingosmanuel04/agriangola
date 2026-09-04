@@ -1,0 +1,903 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserIntent {
+  PRODUCER
+  COOPERATIVE
+  BUYER
+  COMPANY
+  TRANSPORTER
+  WAREHOUSE
+  AGRONOMIST
+  SUPPLIER
+  INVESTOR
+  FINANCIAL
+  EXPORTER
+  CONSUMER
+  ADMIN
+  OPERATOR
+}
+
+enum OrgType {
+  INDIVIDUAL
+  COOPERATIVE
+  COMPANY
+  ENTERPRISE
+  INSTITUTION
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MANAGER
+  FINANCE
+  SALES
+  LOGISTICS
+  AGRONOMIST
+  WORKER
+  VIEWER
+}
+
+enum Plan {
+  FREE
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  RESERVED
+  SOLD
+  EXPIRED
+  HIDDEN
+}
+
+enum DemandStatus {
+  OPEN
+  MATCHED
+  FULFILLED
+  EXPIRED
+  CANCELLED
+}
+
+enum NegotiationStatus {
+  OPEN
+  COUNTERED
+  ACCEPTED
+  REJECTED
+  CONVERTED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum ShipmentStatus {
+  REQUESTED
+  ACCEPTED
+  EN_ROUTE_PICKUP
+  PICKED_UP
+  IN_TRANSIT
+  ARRIVED
+  DELIVERED
+  CANCELLED
+}
+
+enum ContractType {
+  SALE
+  RECURRING_SUPPLY
+  TRANSPORT
+  STORAGE
+  SERVICE
+  CONTRACTED_PRODUCTION
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+  ESCROW
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum DisputeReason {
+  WRONG_PRODUCT
+  WRONG_QUANTITY
+  DELAY
+  NON_PAYMENT
+  QUALITY
+  TRANSPORT
+  DAMAGE
+  OTHER
+}
+
+enum NotificationPriority {
+  URGENT
+  IMPORTANT
+  OPPORTUNITY
+  INFO
+}
+
+enum QualityGrade {
+  A
+  B
+  C
+  MISTO
+}
+
+enum VehicleType {
+  TRUCK
+  PICKUP
+  REEFER
+  VAN
+  TRACTOR_TRAILER
+}
+
+enum WarehouseType {
+  GENERAL
+  SILO
+  COLD
+  DISTRIBUTION
+}
+
+model User {
+  id                 String      @id @default(cuid())
+  email              String      @unique
+  phone              String?
+  passwordHash       String
+  name               String
+  avatarUrl          String?
+  intent             UserIntent
+  bio                String?
+  province           String?
+  municipality       String?
+  lat                Float?
+  lng                Float?
+  language           String      @default("pt")
+  identityVerified   Boolean     @default(false)
+  phoneVerified      Boolean     @default(false)
+  mfaEnabled         Boolean     @default(false)
+  trustScore         Int         @default(40)
+  agriScore          Int         @default(40)
+  isDemo             Boolean     @default(false)
+  isBlocked          Boolean     @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  memberships        Membership[]
+  listings           Listing[]   @relation("ListingSeller")
+  demands            Demand[]
+  negotiationsAsBuyer Negotiation[] @relation("NegBuyer")
+  negotiationsAsSeller Negotiation[] @relation("NegSeller")
+  ordersBought       Order[]     @relation("OrderBuyer")
+  ordersSold         Order[]     @relation("OrderSeller")
+  reviewsGiven       Review[]    @relation("ReviewAuthor")
+  reviewsReceived    Review[]    @relation("ReviewTarget")
+  notifications      Notification[]
+  messagesSent       Message[]   @relation("MsgFrom")
+  farmDiary          FarmDiaryEntry[]
+  aiChats            AiInteraction[]
+  auditLogs          AuditLog[]
+  tasks              Task[]
+  communityPosts     CommunityPost[]
+  vehicles           Vehicle[]
+  farms              Farm[]
+  documents          Document[]
+  badges             UserBadge[]
+  operatorActions    AssistedOperation[] @relation("Operator")
+  assistedFor        AssistedOperation[] @relation("AssistedUser")
+}
+
+model Organization {
+  id               String       @id @default(cuid())
+  name             String
+  slug             String       @unique
+  type             OrgType
+  nif              String?
+  province         String?
+  municipality     String?
+  address          String?
+  lat              Float?
+  lng              Float?
+  description      String?
+  logoUrl          String?
+  verified         Boolean      @default(false)
+  plan             Plan         @default(FREE)
+  memberCount      Int          @default(1)
+  isDemo           Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  memberships      Membership[]
+  listings         Listing[]
+  farms            Farm[]
+  warehouses       Warehouse[]
+  vehicles         Vehicle[]
+  contracts        Contract[]
+  inventory        InventoryItem[]
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           OrgRole      @default(OWNER)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  slug     String    @unique
+  name     String
+  parentId String?
+  parent   Category? @relation("CatTree", fields: [parentId], references: [id])
+  children Category[] @relation("CatTree")
+  products Product[]
+}
+
+model Product {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  name        String
+  categoryId  String
+  category    Category   @relation(fields: [categoryId], references: [id])
+  unit        String     @default("t")
+  description String?
+  listings    Listing[]
+  demands     Demand[]
+  prices      MarketPrice[]
+}
+
+model Listing {
+  id               String        @id @default(cuid())
+  lotCode          String        @unique
+  title            String
+  description      String?
+  productId        String
+  product          Product       @relation(fields: [productId], references: [id])
+  variety          String?
+  quantity         Float
+  availableQty     Float
+  unit             String        @default("t")
+  pricePerUnit     Float
+  negotiable       Boolean       @default(true)
+  quality          QualityGrade  @default(A)
+  certifications   String[]
+  harvestDate      DateTime?
+  availableFrom    DateTime?
+  paymentTerms     String?
+  deliveryTerms    String?
+  province         String
+  municipality     String?
+  lat              Float?
+  lng              Float?
+  photos           String[]
+  videoUrl         String?
+  status           ListingStatus @default(ACTIVE)
+  recurring        Boolean       @default(false)
+  deliveryAvailable Boolean      @default(false)
+  isDemo           Boolean       @default(false)
+  sellerId         String
+  seller           User          @relation("ListingSeller", fields: [sellerId], references: [id])
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id])
+  farmId           String?
+  farm             Farm?         @relation(fields: [farmId], references: [id])
+  harvestId        String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  negotiations     Negotiation[]
+  orders           Order[]
+  views            Int           @default(0)
+
+  @@index([productId, status, province])
+  @@index([sellerId])
+}
+
+model Demand {
+  id             String       @id @default(cuid())
+  title          String
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id])
+  quantity       Float
+  unit           String       @default("t")
+  quality        QualityGrade @default(A)
+  maxPrice       Float?
+  province       String
+  municipality   String?
+  lat            Float?
+  lng            Float?
+  neededBy       DateTime?
+  deliveryIncluded Boolean    @default(false)
+  notes          String?
+  status         DemandStatus @default(OPEN)
+  recurring      Boolean      @default(false)
+  recurrence     String?
+  isDemo         Boolean      @default(false)
+  buyerId        String
+  buyer          User         @relation(fields: [buyerId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  matches        MatchScore[]
+  negotiations   Negotiation[]
+
+  @@index([productId, status, province])
+}
+
+model MatchScore {
+  id           String   @id @default(cuid())
+  demandId     String
+  demand       Demand   @relation(fields: [demandId], references: [id], onDelete: Cascade)
+  listingId    String
+  score        Float
+  breakdown    Json
+  createdAt    DateTime @default(now())
+
+  @@unique([demandId, listingId])
+  @@index([demandId, score])
+}
+
+model Negotiation {
+  id             String             @id @default(cuid())
+  listingId      String?
+  listing        Listing?           @relation(fields: [listingId], references: [id])
+  demandId       String?
+  demand         Demand?            @relation(fields: [demandId], references: [id])
+  buyerId        String
+  buyer          User               @relation("NegBuyer", fields: [buyerId], references: [id])
+  sellerId       String
+  seller         User               @relation("NegSeller", fields: [sellerId], references: [id])
+  status         NegotiationStatus  @default(OPEN)
+  quantity       Float
+  unit           String             @default("t")
+  pricePerUnit   Float
+  deliveryDate   DateTime?
+  deliveryPlace  String?
+  transportNotes String?
+  paymentNotes   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  messages       NegotiationMessage[]
+  orders         Order[]
+  contracts      Contract[]
+}
+
+model NegotiationMessage {
+  id             String       @id @default(cuid())
+  negotiationId  String
+  negotiation    Negotiation  @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  authorId       String
+  kind           String       @default("TEXT")
+  body           String
+  quantity       Float?
+  pricePerUnit   Float?
+  createdAt      DateTime     @default(now())
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  code            String      @unique
+  listingId       String?
+  listing         Listing?    @relation(fields: [listingId], references: [id])
+  negotiationId   String?
+  negotiation     Negotiation? @relation(fields: [negotiationId], references: [id])
+  buyerId         String
+  buyer           User        @relation("OrderBuyer", fields: [buyerId], references: [id])
+  sellerId        String
+  seller          User        @relation("OrderSeller", fields: [sellerId], references: [id])
+  productName     String
+  quantity        Float
+  unit            String
+  pricePerUnit    Float
+  totalAmount     Float
+  status          OrderStatus @default(PENDING)
+  provinceFrom    String?
+  provinceTo      String?
+  notes           String?
+  recurring       Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  shipment        Shipment?
+  contract        Contract?
+  payment         Payment?
+  invoice         Invoice?
+  reviews         Review[]
+  disputes        Dispute[]
+}
+
+model Contract {
+  id             String         @id @default(cuid())
+  code           String         @unique
+  type           ContractType   @default(SALE)
+  status         ContractStatus @default(DRAFT)
+  orderId        String?        @unique
+  order          Order?         @relation(fields: [orderId], references: [id])
+  negotiationId  String?
+  negotiation    Negotiation?   @relation(fields: [negotiationId], references: [id])
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  parties        Json
+  terms          Json
+  penalties      String?
+  signedBuyerAt  DateTime?
+  signedSellerAt DateTime?
+  body           String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String        @unique
+  order       Order         @relation(fields: [orderId], references: [id])
+  amount      Float
+  currency    String        @default("AOA")
+  method      String        @default("TRANSFER")
+  status      PaymentStatus @default(PENDING)
+  providerRef String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id])
+  number    String   @unique
+  amount    Float
+  issuedAt  DateTime @default(now())
+  pdfUrl    String?
+}
+
+model Shipment {
+  id             String         @id @default(cuid())
+  orderId        String         @unique
+  order          Order          @relation(fields: [orderId], references: [id])
+  transporterId  String?
+  vehicleId      String?
+  vehicle        Vehicle?       @relation(fields: [vehicleId], references: [id])
+  status         ShipmentStatus @default(REQUESTED)
+  pickupAddress  String?
+  dropoffAddress String?
+  quotedPrice    Float?
+  distanceKm     Float?
+  eta            DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  events         ShipmentEvent[]
+}
+
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status     ShipmentStatus
+  note       String?
+  lat        Float?
+  lng        Float?
+  createdAt  DateTime @default(now())
+}
+
+model Vehicle {
+  id             String      @id @default(cuid())
+  ownerId        String
+  owner          User        @relation(fields: [ownerId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  type           VehicleType @default(TRUCK)
+  plate          String
+  capacityTons   Float
+  refrigerated   Boolean     @default(false)
+  province       String?
+  available      Boolean     @default(true)
+  shipments      Shipment[]
+}
+
+model Warehouse {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  name           String
+  type           WarehouseType @default(GENERAL)
+  province       String
+  municipality   String?
+  lat            Float?
+  lng            Float?
+  capacityTons   Float
+  availableTons  Float
+  pricePerTonDay Float?
+  conditions     String?
+  isDemo         Boolean       @default(false)
+}
+
+model Farm {
+  id             String        @id @default(cuid())
+  ownerId        String
+  owner          User          @relation(fields: [ownerId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  name           String
+  province       String
+  municipality   String?
+  lat            Float?
+  lng            Float?
+  areaHa         Float
+  soilType       String?
+  irrigation     String?
+  isDemo         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  fields         Field[]
+  listings       Listing[]
+  diary          FarmDiaryEntry[]
+  workers        FarmWorker[]
+}
+
+model Field {
+  id        String  @id @default(cuid())
+  farmId    String
+  farm      Farm    @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  name      String
+  areaHa    Float
+  crop      String?
+  variety   String?
+  plantedAt DateTime?
+  harvestAt DateTime?
+  geojson   Json?
+  crops     CropCycle[]
+}
+
+model CropCycle {
+  id          String    @id @default(cuid())
+  fieldId     String
+  field       Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  crop        String
+  variety     String?
+  plantedAt   DateTime?
+  harvestAt   DateTime?
+  estimatedT  Float?
+  actualT     Float?
+  status      String    @default("PLANNED")
+}
+
+model Harvest {
+  id        String   @id @default(cuid())
+  farmId    String
+  crop      String
+  quantity  Float
+  unit      String   @default("t")
+  quality   QualityGrade @default(A)
+  harvestedAt DateTime @default(now())
+  lotCode   String?
+}
+
+model FarmDiaryEntry {
+  id        String   @id @default(cuid())
+  farmId    String
+  farm      Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  kind      String
+  body      String
+  photos    String[]
+  voiceUrl  String?
+  structured Json?
+  createdAt DateTime @default(now())
+}
+
+model FarmWorker {
+  id     String @id @default(cuid())
+  farmId String
+  farm   Farm   @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  name   String
+  role   String?
+  phone  String?
+}
+
+model InventoryItem {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  name           String
+  kind           String
+  quantity       Float
+  unit           String
+  minQuantity    Float         @default(0)
+  expiresAt      DateTime?
+  location       String?
+  updatedAt      DateTime      @updatedAt
+}
+
+model Review {
+  id         String  @id @default(cuid())
+  orderId    String?
+  order      Order?  @relation(fields: [orderId], references: [id])
+  authorId   String
+  author     User    @relation("ReviewAuthor", fields: [authorId], references: [id])
+  targetId   String
+  target     User    @relation("ReviewTarget", fields: [targetId], references: [id])
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+}
+
+model Dispute {
+  id        String        @id @default(cuid())
+  orderId   String
+  order     Order         @relation(fields: [orderId], references: [id])
+  openerId  String
+  reason    DisputeReason
+  details   String
+  status    DisputeStatus @default(OPEN)
+  resolution String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  link      String?
+  priority  NotificationPriority @default(INFO)
+  read      Boolean              @default(false)
+  createdAt DateTime             @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+model MessageThread {
+  id        String    @id @default(cuid())
+  subject   String?
+  createdAt DateTime  @default(now())
+  messages  Message[]
+}
+
+model Message {
+  id        String         @id @default(cuid())
+  threadId  String
+  thread    MessageThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  fromId    String
+  from      User           @relation("MsgFrom", fields: [fromId], references: [id])
+  kind      String         @default("TEXT")
+  body      String
+  createdAt DateTime       @default(now())
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String
+  filename  String
+  url       String
+  ocrText   String?
+  ocrData   Json?
+  createdAt DateTime @default(now())
+}
+
+model MarketPrice {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  province   String
+  priceKg    Float
+  capturedAt DateTime @default(now())
+  source     String   @default("platform")
+  isDemo     Boolean  @default(true)
+
+  @@index([productId, province, capturedAt])
+}
+
+model WeatherSnapshot {
+  id          String   @id @default(cuid())
+  province    String
+  temperature Float
+  humidity    Float
+  rainMm      Float
+  windKmh     Float
+  condition   String
+  alert       String?
+  capturedAt  DateTime @default(now())
+  isDemo      Boolean  @default(true)
+}
+
+model MapPoi {
+  id         String  @id @default(cuid())
+  kind       String
+  name       String
+  province   String
+  municipality String?
+  lat        Float
+  lng        Float
+  meta       Json?
+  isDemo     Boolean @default(true)
+}
+
+model AiInteraction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  agent     String   @default("AgriAI")
+  prompt    String
+  response  String
+  actions   Json?
+  createdAt DateTime @default(now())
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  name      String
+  props     Json?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, createdAt])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  title       String
+  dueAt       DateTime?
+  done        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model CommunityPost {
+  id        String   @id @default(cuid())
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  category  String
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     String
+  grantedAt DateTime @default(now())
+
+  @@unique([userId, badge])
+}
+
+model AssistedOperation {
+  id          String   @id @default(cuid())
+  operatorId  String
+  operator    User     @relation("Operator", fields: [operatorId], references: [id])
+  userId      String
+  user        User     @relation("AssistedUser", fields: [userId], references: [id])
+  action      String
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  orgId     String
+  plan      Plan
+  status    String   @default("ACTIVE")
+  startedAt DateTime @default(now())
+  endsAt    DateTime?
+}
+
+model LoanApplication {
+  id          String   @id @default(cuid())
+  userId      String
+  kind        String
+  amount      Float
+  purpose     String
+  agriScore   Int
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+}
+
+model InsuranceQuote {
+  id        String   @id @default(cuid())
+  userId    String
+  crop      String
+  areaHa    Float
+  province  String
+  premium   Float?
+  status    String   @default("DRAFT")
+  createdAt DateTime @default(now())
+}
+
+model MachineListing {
+  id           String   @id @default(cuid())
+  ownerId      String
+  name         String
+  kind         String
+  province     String
+  pricePerDay  Float
+  available    Boolean  @default(true)
+  withOperator Boolean  @default(false)
+  isDemo       Boolean  @default(true)
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  category    String
+  durationMin Int
+  isDemo      Boolean  @default(true)
+  lessons     Lesson[]
+}
+
+model Lesson {
+  id       String @id @default(cuid())
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title    String
+  order    Int
+  kind     String @default("VIDEO")
+  body     String?
+}
+
+model Opportunity {
+  id          String   @id @default(cuid())
+  kind        String
+  title       String
+  body        String
+  province    String?
+  link        String?
+  expiresAt   DateTime?
+  isDemo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
