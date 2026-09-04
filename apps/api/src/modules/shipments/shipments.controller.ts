@@ -1,7 +1,10 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { RequestShipmentDto, ShipmentsService } from "./shipments.service";
-import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
+import {
+  CurrentUser,
+  type AuthUser,
+} from "../../common/decorators/current-user.decorator";
 import { IsOptional, IsString } from "class-validator";
 
 class AcceptDto {
@@ -32,12 +35,16 @@ export class ShipmentsController {
   }
 
   @Get(":id")
-  get(@Param("id") id: string) {
-    return this.shipments.get(id);
+  get(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.shipments.get(id, user.id);
   }
 
   @Post(":id/accept")
-  accept(@Param("id") id: string, @CurrentUser() user: AuthUser, @Body() dto: AcceptDto) {
+  accept(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AcceptDto,
+  ) {
     return this.shipments.accept(id, user.id, dto.vehicleId);
   }
 

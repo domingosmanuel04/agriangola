@@ -25,11 +25,27 @@ export class NegotiationsService {
     const demand = dto.demandId
       ? await this.prisma.demand.findUnique({ where: { id: dto.demandId } })
       : null;
-    if (dto.listingId && !listing) throw new NotFoundException("Oferta não encontrada");
+    if (dto.listingId && !listing)
+      throw new NotFoundException("Oferta não encontrada");
+    if (dto.demandId && !demand)
+      throw new NotFoundException("Procura não encontrada");
+    if (listing && listing.status !== "ACTIVE")
+      throw new BadRequestException("Esta oferta já não está disponível");
+    if (demand && demand.status !== "OPEN")
+      throw new BadRequestException("Esta procura já não está aberta");
+    if (listing && dto.quantity > listing.availableQty)
+      throw new BadRequestException("A quantidade excede a oferta disponível");
+    if (demand && demand.buyerId !== userId && listing?.sellerId !== userId)
+      throw new ForbiddenException("Não pode responder a esta procura");
+    if (listing && demand && listing.productId !== demand.productId)
+      throw new BadRequestException(
+        "Oferta e procura referem produtos diferentes",
+      );
     const sellerId = listing?.sellerId;
     const buyerId = demand?.buyerId ?? userId;
     const actualSeller = sellerId ?? userId;
-    if (buyerId === actualSeller) throw new BadRequestException("Não pode negociar consigo próprio");
+    if (buyerId === actualSeller)
+      throw new BadRequestException("Não pode negociar consigo próprio");
 
     const negotiation = await this.prisma.negotiation.create({
       data: {
@@ -43,7 +59,15 @@ export class NegotiationsService {
         deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
         deliveryPlace: dto.deliveryPlace,
         messages: dto.message
-          ? { create: { authorId: userId, body: dto.message, kind: "PROPOSAL", quantity: dto.quantity, pricePerUnit: dto.pricePerUnit } }
+          ? {
+              create: {
+                authorId: userId,
+                body: dto.message,
+                kind: "PROPOSAL",
+                quantity: dto.quantity,
+                pricePerUnit: dto.pricePerUnit,
+              },
+            }
           : undefined,
       },
       include: { messages: true, listing: { include: { product: true } } },
@@ -58,8 +82,15 @@ export class NegotiationsService {
         priority: "IMPORTANT",
       },
     });
-    await this.audit.log({ userId, action: "START_NEGOTIATION", entity: "Negotiation", entityId: negotiation.id });
-    await this.prisma.analyticsEvent.create({ data: { userId, name: "quote_requested" } });
+    await this.audit.log({
+      userId,
+      action: "START_NEGOTIATION",
+      entity: "Negotiation",
+      entityId: negotiation.id,
+    });
+    await this.prisma.analyticsEvent.create({
+      data: { userId, name: "quote_requested" },
+    });
     return negotiation;
   }
 
@@ -81,21 +112,35 @@ export class NegotiationsService {
     const n = await this.prisma.negotiation.findUnique({
       where: { id },
       include: {
-        listing: { include: { product: true, seller: { select: { id: true, name: true } } } },
+        listing: {
+          include: {
+            product: true,
+            seller: { select: { id: true, name: true } },
+          },
+        },
         demand: { include: { product: true } },
-        buyer: { select: { id: true, name: true, trustScore: true, province: true } },
-        seller: { select: { id: true, name: true, trustScore: true, province: true } },
+        buyer: {
+          select: { id: true, name: true, trustScore: true, province: true },
+        },
+        seller: {
+          select: { id: true, name: true, trustScore: true, province: true },
+        },
         messages: { orderBy: { createdAt: "asc" } },
       },
     });
     if (!n) throw new NotFoundException();
-    if (n.buyerId !== userId && n.sellerId !== userId) throw new ForbiddenException();
+    if (n.buyerId !== userId && n.sellerId !== userId)
+      throw new ForbiddenException();
     return n;
   }
 
   async counter(id: string, userId: string, dto: CounterDto) {
     const n = await this.get(id, userId);
-    if (n.status === "CONVERTED" || n.status === "CANCELLED" || n.status === "REJECTED") {
+    if (
+      n.status === "CONVERTED" ||
+      n.status === "CANCELLED" ||
+      n.status === "REJECTED"
+    ) {
       throw new BadRequestException("Negociação encerrada");
     }
     const updated = await this.prisma.negotiation.update({
@@ -104,7 +149,9 @@ export class NegotiationsService {
         status: "COUNTERED",
         quantity: dto.quantity ?? n.quantity,
         pricePerUnit: dto.pricePerUnit ?? n.pricePerUnit,
-        deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : n.deliveryDate,
+        deliveryDate: dto.deliveryDate
+          ? new Date(dto.deliveryDate)
+          : n.deliveryDate,
         deliveryPlace: dto.deliveryPlace ?? n.deliveryPlace,
         transportNotes: dto.transportNotes ?? n.transportNotes,
         paymentNotes: dto.paymentNotes ?? n.paymentNotes,
@@ -135,23 +182,36 @@ export class NegotiationsService {
 
   async accept(id: string, userId: string) {
     const n = await this.get(id, userId);
+    if (["CONVERTED", "CANCELLED", "REJECTED"].includes(n.status))
+      throw new BadRequestException("Negociação encerrada");
+    if (n.status === "ACCEPTED") return n;
     const updated = await this.prisma.negotiation.update({
       where: { id },
       data: {
         status: "ACCEPTED",
-        messages: { create: { authorId: userId, kind: "ACCEPT", body: "Proposta aceite" } },
+        messages: {
+          create: { authorId: userId, kind: "ACCEPT", body: "Proposta aceite" },
+        },
       },
     });
     return updated;
   }
 
   async reject(id: string, userId: string) {
-    await this.get(id, userId);
+    const n = await this.get(id, userId);
+    if (["CONVERTED", "CANCELLED", "REJECTED"].includes(n.status))
+      throw new BadRequestException("Negociação encerrada");
     return this.prisma.negotiation.update({
       where: { id },
       data: {
         status: "REJECTED",
-        messages: { create: { authorId: userId, kind: "REJECT", body: "Proposta recusada" } },
+        messages: {
+          create: {
+            authorId: userId,
+            kind: "REJECT",
+            body: "Proposta recusada",
+          },
+        },
       },
     });
   }

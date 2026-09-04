@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../../common/audit.service";
 
@@ -12,14 +16,25 @@ export class OrdersService {
   async convertFromNegotiation(negotiationId: string, userId: string) {
     const n = await this.prisma.negotiation.findUnique({
       where: { id: negotiationId },
-      include: { listing: { include: { product: true } }, demand: { include: { product: true } } },
+      include: {
+        listing: { include: { product: true } },
+        demand: { include: { product: true } },
+      },
     });
     if (!n) throw new NotFoundException();
-    if (n.buyerId !== userId && n.sellerId !== userId) throw new BadRequestException();
+    if (n.buyerId !== userId && n.sellerId !== userId)
+      throw new BadRequestException();
+    const existing = await this.prisma.order.findFirst({
+      where: { negotiationId },
+    });
+    if (existing) return this.get(existing.id, userId);
     if (n.status !== "ACCEPTED") {
-      throw new BadRequestException("Aceite a negociação antes de converter em contrato/pedido");
+      throw new BadRequestException(
+        "Aceite a negociação antes de converter em contrato/pedido",
+      );
     }
-    const productName = n.listing?.product.name ?? n.demand?.product.name ?? "Produto";
+    const productName =
+      n.listing?.product.name ?? n.demand?.product.name ?? "Produto";
     const seq = await this.prisma.order.count();
     const code = `PED-${new Date().getFullYear()}-${String(seq + 1).padStart(6, "0")}`;
     const total = n.quantity * n.pricePerUnit;
@@ -42,7 +57,10 @@ export class OrdersService {
           provinceTo: n.deliveryPlace ?? n.demand?.province,
         },
       });
-      await tx.negotiation.update({ where: { id: n.id }, data: { status: "CONVERTED" } });
+      await tx.negotiation.update({
+        where: { id: n.id },
+        data: { status: "CONVERTED" },
+      });
       if (n.listingId) {
         await tx.listing.update({
           where: { id: n.listingId },
@@ -54,7 +72,12 @@ export class OrdersService {
         data: { orderId: created.id, number: invoiceNumber, amount: total },
       });
       await tx.payment.create({
-        data: { orderId: created.id, amount: total, status: "PENDING", method: "TRANSFER" },
+        data: {
+          orderId: created.id,
+          amount: total,
+          status: "PENDING",
+          method: "TRANSFER",
+        },
       });
       const contractCode = `CTR-${created.code}`;
       const body = this.contractBody(created.code, n, productName, total);
@@ -98,7 +121,12 @@ export class OrdersService {
         },
       ],
     });
-    await this.audit.log({ userId, action: "CONVERT_ORDER", entity: "Order", entityId: order.id });
+    await this.audit.log({
+      userId,
+      action: "CONVERT_ORDER",
+      entity: "Order",
+      entityId: order.id,
+    });
     await this.prisma.analyticsEvent.create({
       data: { userId, name: "purchase", props: { code, total } },
     });
@@ -118,14 +146,20 @@ export class OrdersService {
     });
   }
 
-  async get(id: string, _userId: string) {
+  async get(id: string, userId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
-        buyer: { select: { id: true, name: true, trustScore: true, province: true } },
-        seller: { select: { id: true, name: true, trustScore: true, province: true } },
+        buyer: {
+          select: { id: true, name: true, trustScore: true, province: true },
+        },
+        seller: {
+          select: { id: true, name: true, trustScore: true, province: true },
+        },
         listing: { include: { product: true } },
-        shipment: { include: { events: { orderBy: { createdAt: "asc" } }, vehicle: true } },
+        shipment: {
+          include: { events: { orderBy: { createdAt: "asc" } }, vehicle: true },
+        },
         contract: true,
         payment: true,
         invoice: true,
@@ -134,12 +168,21 @@ export class OrdersService {
       },
     });
     if (!order) throw new NotFoundException();
+    if (order.buyerId !== userId && order.sellerId !== userId)
+      throw new BadRequestException("Sem acesso a este pedido");
     return order;
   }
 
-  async updateStatus(id: string, userId: string, status: "DELIVERED" | "COMPLETED" | "CANCELLED") {
+  async updateStatus(
+    id: string,
+    userId: string,
+    status: "DELIVERED" | "COMPLETED" | "CANCELLED",
+  ) {
     const order = await this.get(id, userId);
-    const updated = await this.prisma.order.update({ where: { id }, data: { status } });
+    const updated = await this.prisma.order.update({
+      where: { id },
+      data: { status },
+    });
     if (status === "COMPLETED" && order.payment) {
       await this.prisma.payment.update({
         where: { orderId: id },
@@ -151,7 +194,14 @@ export class OrdersService {
 
   private contractBody(
     code: string,
-    n: { quantity: number; unit: string; pricePerUnit: number; deliveryPlace: string | null; buyerId: string; sellerId: string },
+    n: {
+      quantity: number;
+      unit: string;
+      pricePerUnit: number;
+      deliveryPlace: string | null;
+      buyerId: string;
+      sellerId: string;
+    },
     productName: string,
     total: number,
   ): string {

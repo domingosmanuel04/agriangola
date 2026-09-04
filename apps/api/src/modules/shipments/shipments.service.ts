@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ShipmentStatus } from "@prisma/client";
 import { IsNumber, IsOptional, IsString } from "class-validator";
@@ -34,10 +39,15 @@ export class ShipmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async request(userId: string, dto: RequestShipmentDto) {
-    const order = await this.prisma.order.findUnique({ where: { id: dto.orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: dto.orderId },
+    });
     if (!order) throw new NotFoundException("Pedido não encontrado");
-    if (order.buyerId !== userId && order.sellerId !== userId) throw new BadRequestException();
-    const existing = await this.prisma.shipment.findUnique({ where: { orderId: order.id } });
+    if (order.buyerId !== userId && order.sellerId !== userId)
+      throw new BadRequestException();
+    const existing = await this.prisma.shipment.findUnique({
+      where: { orderId: order.id },
+    });
     if (existing) return this.get(existing.id);
 
     const shipment = await this.prisma.shipment.create({
@@ -47,12 +57,16 @@ export class ShipmentsService {
         dropoffAddress: dto.dropoffAddress ?? order.provinceTo ?? undefined,
         quotedPrice: dto.quotedPrice,
         status: "REQUESTED",
-        events: { create: { status: "REQUESTED", note: "Transporte solicitado" } },
+        events: {
+          create: { status: "REQUESTED", note: "Transporte solicitado" },
+        },
       },
       include: { events: true, order: true },
     });
-    await this.prisma.order.update({ where: { id: order.id }, data: { status: "IN_TRANSIT" } });
-    const transporters = await this.prisma.user.findMany({ where: { intent: "TRANSPORTER" }, take: 10 });
+    const transporters = await this.prisma.user.findMany({
+      where: { intent: "TRANSPORTER" },
+      take: 10,
+    });
     if (transporters.length) {
       await this.prisma.notification.createMany({
         data: transporters.map((t) => ({
@@ -76,12 +90,16 @@ export class ShipmentsService {
           { order: { sellerId: userId } },
         ],
       },
-      include: { order: true, vehicle: true, events: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: {
+        order: true,
+        vehicle: true,
+        events: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  async get(id: string) {
+  async get(id: string, userId?: string) {
     const s = await this.prisma.shipment.findUnique({
       where: { id },
       include: {
@@ -91,26 +109,64 @@ export class ShipmentsService {
       },
     });
     if (!s) throw new NotFoundException();
+    if (
+      userId &&
+      s.order.buyerId !== userId &&
+      s.order.sellerId !== userId &&
+      s.transporterId !== userId
+    )
+      throw new ForbiddenException();
     return s;
   }
 
   async accept(id: string, transporterId: string, vehicleId?: string) {
     const shipment = await this.get(id);
+    const transporter = await this.prisma.user.findUnique({
+      where: { id: transporterId },
+      select: { intent: true },
+    });
+    if (transporter?.intent !== "TRANSPORTER")
+      throw new ForbiddenException(
+        "Apenas transportadores podem aceitar cargas",
+      );
+    if (shipment.status !== "REQUESTED")
+      throw new BadRequestException("Esta carga já foi atribuída");
+    const vehicle = vehicleId
+      ? await this.prisma.vehicle.findUnique({ where: { id: vehicleId } })
+      : null;
+    if (
+      vehicleId &&
+      (!vehicle || vehicle.ownerId !== transporterId || !vehicle.available)
+    )
+      throw new BadRequestException("Veículo indisponível");
+    if (vehicle && vehicle.capacityTons < shipment.order.quantity)
+      throw new BadRequestException("A capacidade do veículo é insuficiente");
     return this.prisma.shipment.update({
       where: { id },
       data: {
         transporterId,
         vehicleId,
         status: "ACCEPTED",
-        events: { create: { status: "ACCEPTED", note: "Transportador aceite" } },
+        events: {
+          create: { status: "ACCEPTED", note: "Transportador aceite" },
+        },
       },
     });
   }
 
   async advance(id: string, userId: string) {
-    const s = await this.get(id);
+    const s = await this.get(id, userId);
+    if (
+      s.transporterId !== userId &&
+      s.order.buyerId !== userId &&
+      s.order.sellerId !== userId
+    )
+      throw new ForbiddenException();
+    if (s.status === "REQUESTED")
+      throw new BadRequestException("Atribua primeiro um transportador");
     const idx = FLOW.indexOf(s.status);
-    if (idx < 0 || idx >= FLOW.length - 1) throw new BadRequestException("Não é possível avançar");
+    if (idx < 0 || idx >= FLOW.length - 1)
+      throw new BadRequestException("Não é possível avançar");
     const next = FLOW[idx + 1];
     const updated = await this.prisma.shipment.update({
       where: { id },
@@ -121,7 +177,10 @@ export class ShipmentsService {
       include: { events: true, order: true },
     });
     if (next === "DELIVERED") {
-      await this.prisma.order.update({ where: { id: s.orderId }, data: { status: "DELIVERED" } });
+      await this.prisma.order.update({
+        where: { id: s.orderId },
+        data: { status: "DELIVERED" },
+      });
       await this.prisma.notification.createMany({
         data: [
           {
@@ -145,7 +204,12 @@ export class ShipmentsService {
   }
 
   async vehicles() {
-    return this.prisma.vehicle.findMany({ where: { available: true }, include: { owner: { select: { id: true, name: true, trustScore: true } } } });
+    return this.prisma.vehicle.findMany({
+      where: { available: true },
+      include: {
+        owner: { select: { id: true, name: true, trustScore: true } },
+      },
+    });
   }
 }
 

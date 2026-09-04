@@ -4,8 +4,15 @@
 
 :root {
   color-scheme: light;
-  --bg: #f6f1e7;
-  --ink: #0c1f16;
+  --bg: #f8faf7;
+  --ink: #17201a;
+  --primary: #166534;
+  --primary-dark: #14532d;
+  --primary-light: #22c55e;
+  --surface: #ffffff;
+  --muted: #667085;
+  --line: #e4e7e5;
+  --premium: #c9a227;
 }
 
 html,
@@ -17,11 +24,19 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(201, 162, 39, 0.09), transparent 50%),
-    radial-gradient(900px 500px at 110% 0%, rgba(45, 106, 79, 0.14), transparent 46%),
-    var(--bg);
+    radial-gradient(
+      900px 500px at 10% -10%,
+      rgba(34, 197, 94, 0.16),
+      transparent 52%
+    ),
+    radial-gradient(
+      900px 500px at 100% 0%,
+      rgba(134, 239, 172, 0.15),
+      transparent 48%
+    ),
+    linear-gradient(135deg, #f8faf7 0%, #f1faf3 52%, #f8faf7 100%);
   color: var(--ink);
-  font-family: Outfit, system-ui, sans-serif;
+  font-family: Inter, Outfit, system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }
@@ -29,28 +44,88 @@ body {
 h1,
 h2,
 .font-display {
-  font-family: Fraunces, Georgia, serif;
-  letter-spacing: -0.02em;
+  font-family: Manrope, Outfit, sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(34, 197, 94, 0.55);
+  outline-offset: 3px;
 }
 
 ::selection {
-  background: #c9a227;
-  color: #07140e;
+  background: #22c55e;
+  color: #052e16;
 }
 
 .pattern-strip {
   background-image: repeating-linear-gradient(
     90deg,
-    #c9a227 0 10px,
-    #163525 10px 20px,
-    #bc6c25 20px 30px,
-    #f6f1e7 30px 40px
+    #22c55e 0 10px,
+    #166534 10px 20px,
+    #86efac 20px 30px,
+    #f8faf7 30px 40px
+  );
+}
+
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 700ms ease-out both;
+}
+
+.green-gradient {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 52%, #166534 100%);
+}
+
+.green-gradient-deep {
+  background: linear-gradient(135deg, #14532d 0%, #166534 48%, #052e16 100%);
+}
+
+.green-gradient-soft {
+  background: linear-gradient(
+    135deg,
+    rgba(220, 252, 231, 0.96) 0%,
+    rgba(240, 253, 244, 0.9) 48%,
+    rgba(255, 255, 255, 0.98) 100%
   );
 }
 
 .leaflet-container {
   font-family: inherit;
-  background: #d8f3dc;
+  background: #dcfce7;
 }
 
 input,
